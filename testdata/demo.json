@@ -1,0 +1,263 @@
+{
+  "version": 1,
+  "manifest": {
+    "version": 2,
+    "buildId": "demo-failed-run",
+    "mainTargetId": "all",
+    "createdAtUnixNanos": "1791556200000000000",
+    "startedAtUnixNanos": "1791556200000000000",
+    "endedAtUnixNanos": "1791556206000000000",
+    "status": "RUN_STATUS_FAILURE",
+    "gitAuthor": "Demo Author",
+    "targets": {
+      "all": {
+        "name": "+all",
+        "canonicalName": "+all",
+        "initialPlatform": "linux/amd64",
+        "status": "RUN_STATUS_FAILURE",
+        "startedAtUnixNanos": "1791556200000000000",
+        "endedAtUnixNanos": "1791556206000000000",
+        "dependsOn": [
+          "build",
+          "test",
+          "package"
+        ]
+      },
+      "build": {
+        "name": "+build",
+        "canonicalName": "+build",
+        "initialPlatform": "linux/amd64",
+        "status": "RUN_STATUS_SUCCESS",
+        "startedAtUnixNanos": "1791556200100000000",
+        "endedAtUnixNanos": "1791556204000000000",
+        "dependsOn": []
+      },
+      "test": {
+        "name": "+test",
+        "canonicalName": "+test",
+        "initialPlatform": "linux/amd64",
+        "status": "RUN_STATUS_FAILURE",
+        "startedAtUnixNanos": "1791556204000000000",
+        "endedAtUnixNanos": "1791556205500000000",
+        "dependsOn": [
+          "build"
+        ]
+      },
+      "package": {
+        "name": "+package",
+        "canonicalName": "+package",
+        "initialPlatform": "linux/amd64",
+        "status": "RUN_STATUS_SUCCESS",
+        "startedAtUnixNanos": "1791556204000000000",
+        "endedAtUnixNanos": "1791556204800000000",
+        "dependsOn": [
+          "build"
+        ]
+      }
+    },
+    "commands": {
+      "all-build": {
+        "name": "BUILD +build",
+        "targetId": "all",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556200000000000",
+        "endedAtUnixNanos": "1791556204000000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 4
+        },
+        "dependsOn": [
+          {
+            "targetId": "build",
+            "referencedName": "+build"
+          }
+        ]
+      },
+      "all-test": {
+        "name": "BUILD +test",
+        "targetId": "all",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556200000000000",
+        "endedAtUnixNanos": "1791556205500000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 5
+        },
+        "dependsOn": [
+          {
+            "targetId": "test",
+            "referencedName": "+test"
+          }
+        ]
+      },
+      "all-package": {
+        "name": "BUILD +package",
+        "targetId": "all",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556200000000000",
+        "endedAtUnixNanos": "1791556204800000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 6
+        },
+        "dependsOn": [
+          {
+            "targetId": "package",
+            "referencedName": "+package"
+          }
+        ]
+      },
+      "build-deps": {
+        "name": "RUN go mod download",
+        "targetId": "build",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556200100000000",
+        "endedAtUnixNanos": "1791556200100000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 10
+        },
+        "isCached": true
+      },
+      "build-compile": {
+        "name": "RUN go build -o /out/app ./cmd/app",
+        "targetId": "build",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556200300000000",
+        "endedAtUnixNanos": "1791556204000000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 11
+        }
+      },
+      "test-run": {
+        "name": "RUN go test ./...",
+        "targetId": "test",
+        "status": "RUN_STATUS_FAILURE",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556204000000000",
+        "endedAtUnixNanos": "1791556205500000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 16
+        },
+        "errorMessage": "test command exited with code 1"
+      },
+      "package-copy": {
+        "name": "COPY +build/app ./app",
+        "targetId": "package",
+        "status": "RUN_STATUS_SUCCESS",
+        "platform": "linux/amd64",
+        "startedAtUnixNanos": "1791556204000000000",
+        "endedAtUnixNanos": "1791556204800000000",
+        "sourceLocation": {
+          "file": "Earthfile",
+          "startLine": 21
+        },
+        "dependsOn": [
+          {
+            "targetId": "build",
+            "referencedName": "+build"
+          }
+        ]
+      }
+    },
+    "failure": {
+      "type": "FAILURE_TYPE_NONZERO_EXIT",
+      "targetId": "test",
+      "commandId": "test-run",
+      "errorMessage": "test command exited with code 1"
+    }
+  },
+  "runDurationNanos": 6000000000,
+  "targetDurationNanos": {
+    "all": 6000000000,
+    "build": 3900000000,
+    "test": 1500000000,
+    "package": 800000000
+  },
+  "commandDurationNanos": {
+    "all-build": 4000000000,
+    "all-test": 5500000000,
+    "all-package": 4800000000,
+    "build-deps": 0,
+    "build-compile": 3700000000,
+    "test-run": 1500000000,
+    "package-copy": 800000000
+  },
+  "logs": {
+    "_generic:default": [
+      {
+        "targetId": "",
+        "stream": 0,
+        "timestampUnixNanos": 1791556200000000000,
+        "data": "U3RhcnRpbmcgbG9jYWwgYnVpbGQK"
+      }
+    ],
+    "build-compile": [
+      {
+        "targetId": "build",
+        "stream": 1,
+        "timestampUnixNanos": 1791556200400000000,
+        "data": "Q29tcGlsaW5nIGFwcC4uLgo="
+      },
+      {
+        "targetId": "build",
+        "stream": 1,
+        "timestampUnixNanos": 1791556203900000000,
+        "data": "Q29tcGlsZWQgYXBwIHN1Y2Nlc3NmdWxseQo="
+      }
+    ],
+    "test-run": [
+      {
+        "targetId": "test",
+        "stream": 1,
+        "timestampUnixNanos": 1791556204099999999,
+        "data": "PT09IFJVTiAgIFRlc3RIZWFsdGgK"
+      },
+      {
+        "targetId": "test",
+        "stream": 1,
+        "timestampUnixNanos": 1791556204200000000,
+        "data": "LS0tIFBBU1M6IFRlc3RIZWFsdGggKDAuMDFzKQo="
+      },
+      {
+        "targetId": "test",
+        "stream": 1,
+        "timestampUnixNanos": 1791556204400000000,
+        "data": "PT09IFJVTiAgIFRlc3RSZXNwb25zZQo="
+      },
+      {
+        "targetId": "test",
+        "stream": 1,
+        "timestampUnixNanos": 1791556204500000000,
+        "data": "ICAgIHJlc3BvbnNlX3Rlc3QuZ286NDI6IGdvdCA1MDMsIHdhbnQgMjAwCg=="
+      },
+      {
+        "targetId": "test",
+        "stream": 2,
+        "timestampUnixNanos": 1791556205400000000,
+        "data": "RkFJTCBhcHAvc2VydmljZQpleGl0IGNvZGUgMQo="
+      },
+      {
+        "targetId": "test",
+        "stream": 3,
+        "timestampUnixNanos": 1791556205400000000,
+        "data": "eyJtZW1vcnkiOjEwNDg1NzZ9Cg=="
+      }
+    ],
+    "package-copy": [
+      {
+        "targetId": "package",
+        "stream": 1,
+        "timestampUnixNanos": 1791556204500000000,
+        "data": "Q29waWVkIGFwcCB0byBpbWFnZQo="
+      }
+    ]
+  }
+}
