@@ -71,7 +71,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 func validCommand(command string) bool {
 	switch command {
-	case "import", "browse", "runs", "export", "logs", "delete", "run":
+	case "import", "browse", "runs", "export", "logs", "delete", "run", "serve":
 		return true
 	default:
 		return false
@@ -81,6 +81,8 @@ func validCommand(command string) bool {
 func execute(db *store.Store, earth string, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	command, args := args[0], args[1:]
 	switch command {
+	case "serve":
+		return serve(db, args, stdout, stderr)
 	case "import":
 		if len(args) == 0 {
 			args = []string{"-"}
@@ -266,6 +268,7 @@ Usage: earth-profile [--db PATH] [--earth EXECUTABLE] COMMAND
   import [FILE ...]            Import profiles; '-' or no file reads stdin
   run [EARTH ARGUMENTS ...]    Capture a build and import its profile
   browse [BUILD_ID]            Open the TUI (default command)
+  serve [--listen HOST:PORT]   Serve the web viewer and upload API
   runs                        List saved run summaries
   logs [--stream N] ID STEP    Write a step's original log bytes
   export BUILD_ID [FILE|-]     Export a saved profile

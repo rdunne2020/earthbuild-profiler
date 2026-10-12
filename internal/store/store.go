@@ -4,6 +4,7 @@ package store
 import (
 	"cmp"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,9 @@ type Summary struct {
 
 // Store opens the database per operation, so an idle viewer never blocks imports.
 type Store struct{ path string }
+
+// ErrNotFound identifies a missing run.
+var ErrNotFound = errors.New("run not found")
 
 // DefaultPath uses the XDG state directory or its conventional home fallback.
 func DefaultPath() (string, error) {
@@ -149,7 +153,7 @@ func (s *Store) Load(id string) (*profile.Profile, error) {
 		return db.View(func(tx *bolt.Tx) error {
 			value := tx.Bucket([]byte("profiles")).Get([]byte(id))
 			if value == nil {
-				return fmt.Errorf("run %q not found", id)
+				return fmt.Errorf("run %q: %w", id, ErrNotFound)
 			}
 			return json.Unmarshal(value, &p)
 		})
@@ -165,7 +169,7 @@ func (s *Store) Delete(id string) error {
 	return s.withDB(false, func(db *bolt.DB) error {
 		return db.Update(func(tx *bolt.Tx) error {
 			if tx.Bucket([]byte("profiles")).Get([]byte(id)) == nil {
-				return fmt.Errorf("run %q not found", id)
+				return fmt.Errorf("run %q: %w", id, ErrNotFound)
 			}
 			if err := tx.Bucket([]byte("profiles")).Delete([]byte(id)); err != nil {
 				return err

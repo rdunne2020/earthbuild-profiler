@@ -1,0 +1,10 @@
+.git
+.agents
+.codex
+.aws
+bin
+dist
+*.db
+*.db.*
+.tmp-earthly-out
+.tmp-earth-out
