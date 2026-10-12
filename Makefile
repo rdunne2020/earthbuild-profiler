@@ -1,6 +1,10 @@
 export GOTOOLCHAIN := auto
+EARTHLY ?= earthly
 
-.PHONY: build test lint fmt demo
+.PHONY: build test lint fmt demo image
+
+image:
+	$(EARTHLY) +image
 
 build:
 	go build -o bin/earth-profile ./cmd/earth-profile

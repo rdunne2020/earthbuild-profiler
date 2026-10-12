@@ -1,0 +1,164 @@
+name: Build and release
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  checks:
+    name: Tests, lint, and container build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: EarthBuild/actions-setup@v2.2.0
+        with:
+          version: v0.8.19
+      - name: Run Earthfile checks and build
+        run: earth --ci +all
+
+  binaries:
+    name: CLI/TUI (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: EarthBuild/actions-setup@v2.2.0
+        with:
+          version: v0.8.19
+      - name: Build and package binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ext=''
+          if [[ "$GOOS" == windows ]]; then ext='.exe'; fi
+          earth --ci --output +release-binary --GOOS="$GOOS" --GOARCH="$GOARCH" --EXT="$ext"
+          mkdir -p artifacts
+          if [[ "$GOOS" == windows ]]; then
+            (cd "dist/$GOOS-$GOARCH" && zip "../../artifacts/earth-profile-$GOOS-$GOARCH.zip" "earth-profile$ext")
+          else
+            tar -C "dist/$GOOS-$GOARCH" -czf "artifacts/earth-profile-$GOOS-$GOARCH.tar.gz" earth-profile
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: earth-profile-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+
+  image:
+    name: Publish GHCR image
+    needs: [checks, binaries]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.tags.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: EarthBuild/actions-setup@v2.2.0
+        with:
+          version: v0.8.19
+      - name: Choose image tags
+        id: tags
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${REPOSITORY,,}"
+          tag=main
+          alias="sha-$COMMIT"
+          if [[ "$REF_TYPE" == tag ]]; then
+            if [[ ! "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              printf 'Expected a version tag such as v1.2.3 or v1.2.3-rc.1\n' >&2
+              exit 1
+            fi
+            tag="$REF_NAME"
+            if [[ "$REF_NAME" != *-* ]]; then alias=latest; fi
+          fi
+          printf 'image=%s:%s\nalias=%s:%s\nversion=%s\n' "$image" "$tag" "$image" "$alias" "$tag" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+      - name: Build and push image through Earthly
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+          IMAGE_ALIAS: ${{ steps.tags.outputs.alias }}
+          VERSION: ${{ steps.tags.outputs.version }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: earth --ci --push +image --IMAGE="$IMAGE" --IMAGE_ALIAS="$IMAGE_ALIAS" --VERSION="$VERSION" --SOURCE="$SOURCE" --REVISION="$REVISION"
+      - name: Record image link
+        env:
+          IMAGE: ${{ steps.tags.outputs.image }}
+        run: |
+          printf 'Published container image: `%s`\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Publish GitHub release and binaries
+    needs: [binaries, image]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: earth-profile-*
+          merge-multiple: true
+          path: artifacts
+      - name: Create checksums and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          IMAGE: ${{ needs.image.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          sha256sum earth-profile-*.tar.gz earth-profile-*.zip > SHA256SUMS
+          printf 'Container image: `%s`\n\nDownload the CLI/TUI archive for your OS and architecture. Verify it against `SHA256SUMS`.\n' "$IMAGE" > /tmp/release-notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" earth-profile-* SHA256SUMS --clobber
+          else
+            options=()
+            if [[ "$TAG" == *-* ]]; then options+=(--prerelease --latest=false); fi
+            gh release create "$TAG" earth-profile-* SHA256SUMS \
+              --verify-tag --title "$TAG" --generate-notes --notes-file /tmp/release-notes.md "${options[@]}"
+          fi

@@ -1,0 +1,846 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "EarthBuild Profiler API",
+    "version": "1.0.0",
+    "description": "Upload completed EarthBuild profiles from CI and browse persistent run history. API bearer authentication is required only when EARTH_PROFILE_TOKEN is configured. Documentation and health checks are public; tokens are never included in run links. No deletion endpoint is exposed."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This profiler server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Runs"
+    },
+    {
+      "name": "Logs"
+    },
+    {
+      "name": "Health"
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "Check HTTP liveness",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Server is responding (not a database readiness check).",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "ok\n"
+              }
+            }
+          }
+        },
+        "security": [],
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "summary": "List saved runs",
+        "operationId": "listRuns",
+        "responses": {
+          "200": {
+            "description": "Most recently started first; an empty array if no runs are saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Summary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Runs"
+        ]
+      },
+      "post": {
+        "summary": "Upload a completed profile",
+        "operationId": "uploadRun",
+        "responses": {
+          "200": {
+            "description": "Saved run summary and direct browser link. New imports and upserts both return 200.",
+            "headers": {
+              "Location": {
+                "description": "The same browser URL returned in url.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "description": "Send raw EarthBuild --profile JSON, not a multipart form. Maximum body size: 512 MiB. Validates profile/manifest versions, target references, exact integer timestamps, and base64 logs. Atomically upserts by build ID while preserving the original import date. Unknown metadata is retained. The returned url selects this upload, regardless of run ordering.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Profile"
+              },
+              "example": {
+                "version": 1,
+                "manifest": {
+                  "version": 2,
+                  "buildId": "ci-example-run",
+                  "mainTargetId": "all",
+                  "startedAtUnixNanos": "1791556200000000000",
+                  "endedAtUnixNanos": "1791556201000000000",
+                  "status": "RUN_STATUS_SUCCESS",
+                  "targets": {
+                    "all": {
+                      "name": "+all",
+                      "dependsOn": []
+                    }
+                  },
+                  "commands": {}
+                },
+                "runDurationNanos": 1000000000,
+                "logs": {}
+              }
+            }
+          }
+        },
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Build ID. URL-encode special characters.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get run metadata and graph",
+        "operationId": "getRun",
+        "responses": {
+          "200": {
+            "description": "Profile with no log chunks (logs is empty). Use the logs or export endpoint for output.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/{id}/export": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Build ID. URL-encode special characters.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Download the complete profile",
+        "operationId": "exportRun",
+        "responses": {
+          "200": {
+            "description": "Complete stored profile, including original log bytes and unknown metadata.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "attachment; filename=\"profile.json\""
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "tags": [
+          "Runs"
+        ]
+      }
+    },
+    "/api/runs/{id}/logs": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Build ID. URL-encode special characters.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Read command or target output",
+        "operationId": "getLogs",
+        "responses": {
+          "200": {
+            "description": "Original log bytes; empty output is valid. Target chunks are merged by timestamp, counting shared dependencies once.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        },
+        "description": "Supply command or target. If both are supplied, command takes precedence. Stream 0 combines stdout, stderr, and stream 0 messages, excluding execution statistics. Explicit streams retain original bytes.",
+        "parameters": [
+          {
+            "name": "command",
+            "in": "query",
+            "description": "Command instance ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "description": "Target instance ID.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "dependencies",
+            "in": "query",
+            "description": "Include the selected target\u2019s dependencies. Only the literal true enables this; ignored for command selection.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "stream",
+            "in": "query",
+            "description": "0: combined text, 1: stdout, 2: stderr; other nonnegative int32 values select raw streams.",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "default": 0
+            }
+          }
+        ],
+        "tags": [
+          "Logs"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Enter EARTH_PROFILE_TOKEN using Authorize. Not required when the server has no token configured."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Summary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "importedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationNanos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Recorded nanoseconds; null means unknown. Zero is a valid duration.",
+            "nullable": true
+          },
+          "commands": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "targets": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "target",
+          "status",
+          "startedAtUnixNanos",
+          "importedAt",
+          "durationNanos",
+          "commands",
+          "targets"
+        ]
+      },
+      "UploadResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Summary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Absolute browser URL selecting the run saved by this upload. Uses --public-url / EARTH_PROFILE_PUBLIC_URL when set, otherwise the incoming request origin."
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        ]
+      },
+      "SourceLocation": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "startLine": {
+            "type": "integer"
+          },
+          "repositoryUrl": {
+            "type": "string"
+          },
+          "repositoryHash": {
+            "type": "string"
+          }
+        }
+      },
+      "Reference": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "referencedName": {
+            "type": "string"
+          }
+        }
+      },
+      "Target": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "canonicalName": {
+            "type": "string"
+          },
+          "overrideArgs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "initialPlatform": {
+            "type": "string"
+          },
+          "finalPlatform": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "endedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "Command": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "isCached": {
+            "type": "boolean"
+          },
+          "isLocal": {
+            "type": "boolean"
+          },
+          "isInteractive": {
+            "type": "boolean"
+          },
+          "startedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "endedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "sourceLocation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SourceLocation"
+              }
+            ],
+            "nullable": true
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "nullable": true
+          }
+        }
+      },
+      "Failure": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "commandId": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "helpMessage": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string",
+            "format": "byte",
+            "nullable": true
+          }
+        }
+      },
+      "Chunk": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "timestampUnixNanos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+          },
+          "data": {
+            "type": "string",
+            "format": "byte",
+            "description": "Base64-encoded original output bytes."
+          }
+        }
+      },
+      "Manifest": {
+        "type": "object",
+        "properties": {
+          "buildId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Nonblank build ID; used as the upsert key."
+          },
+          "version": {
+            "type": "integer",
+            "enum": [
+              0,
+              2
+            ],
+            "description": "Version 2, or omitted/zero for legacy exports."
+          },
+          "createdAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "startedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "endedAtUnixNanos": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "example": "1791556200000000000"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unsigned 64-bit integer; JavaScript clients should avoid precision loss for large values."
+              }
+            ],
+            "description": "Unix nanoseconds. Decimal strings preserve integer precision; imports also accept exact unsigned integers."
+          },
+          "status": {
+            "type": "string"
+          },
+          "mainTargetId": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Target"
+            },
+            "nullable": true
+          },
+          "commands": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Command"
+            },
+            "nullable": true
+          },
+          "failure": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Failure"
+              }
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "buildId"
+        ]
+      },
+      "Profile": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/Manifest"
+          },
+          "runDurationNanos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Recorded nanoseconds; null means unknown. Zero is a valid duration.",
+            "nullable": true
+          },
+          "targetDurationNanos": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Recorded nanoseconds; null means unknown. Zero is a valid duration.",
+              "nullable": true
+            },
+            "nullable": true
+          },
+          "commandDurationNanos": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Recorded nanoseconds; null means unknown. Zero is a valid duration.",
+              "nullable": true
+            },
+            "nullable": true
+          },
+          "logs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Chunk"
+              },
+              "nullable": true
+            },
+            "nullable": true
+          }
+        },
+        "required": [
+          "version",
+          "manifest"
+        ]
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid profile or log query.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid bearer token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Run, command, or target not found.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "Request body exceeds 512 MiB.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Storage operation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

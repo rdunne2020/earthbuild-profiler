@@ -1,0 +1,15 @@
+services:
+  profiler:
+    image: ghcr.io/rdunne2020/earthbuild-profiler:latest
+    pull_policy: never
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      EARTH_PROFILE_TOKEN: ${EARTH_PROFILE_TOKEN:-}
+      EARTH_PROFILE_PUBLIC_URL: ${EARTH_PROFILE_PUBLIC_URL:-}
+    volumes:
+      - profiles:/data
+    restart: unless-stopped
+    stop_grace_period: 15s
+volumes:
+  profiles:
